@@ -25,7 +25,18 @@ class Controller:
         self.stabilizer=droneSTAB()
         self.KILL = False
         self.KILL_HEIGHT = 0.1
-        self.smoothing_number = 2
+        
+        self.smoothing_number = 3
+        #sets the velocity estimation weights based on smoothing number
+        if self.smoothing_number == 2:
+            self.vel_weights = np.array([0.5, 0.5])
+        elif self.smoothing_number == 3:
+            self.vel_weights = np.array([0.25, 0.3, 0.45])
+        elif self.smoothing_number  == 4:
+            self.vel_weights = np.array([0.05, 0.2, 0.25, 0.4])
+        else:
+            self.vel_weights = np.ones(self.smoothing_number)* 1/self.smoothing_number
+            
         self.vx_reg = np.zeros(self.smoothing_number)
         self.vy_reg = np.zeros(self.smoothing_number)
         self.vz_reg = np.zeros(self.smoothing_number)
@@ -141,6 +152,7 @@ class Controller:
         self.vy = data['kalman.statePY']
         self.vz = data['kalman.statePZ']
         self.vel = np.dot(self.R, vel_bf)
+        self.update_speed_regs()
 
     def _log_data_att(self, timestamp, data, logconf):
         # NOTE q0 is real part of Kalman state's quaternion, but
@@ -169,9 +181,9 @@ class Controller:
         time.sleep(1.5)
         
     def check_kill_conditions(self):
-        if abs(self.pitch) > 35:
+        if abs(self.pitch) > 45:
             self.KILL = True
-        if abs(self.roll) > 35:
+        if abs(self.roll) > 45:
             self.KILL = True
             
     def update_speed_regs(self):
@@ -182,9 +194,10 @@ class Controller:
         self.vx_reg[-1] = self.vx
         self.vy_reg[-1] = self.vy
         self.vz_reg[-1] = self.vz
-        self.vx_avg = np.sum(self.vx_reg)/self.smoothing_number
-        self.vy_avg = np.sum(self.vy_reg)/self.smoothing_number
-        self.vz_avg = np.sum(self.vz_reg)/self.smoothing_number
+        
+        self.vx_avg = np.dot(self.vx_reg, self.vel_weights)
+        self.vy_avg = np.dot(self.vy_reg, self.vel_weights)
+        self.vz_avg = np.dot(self.vz_reg, self.vel_weights)
             
     def run(self):
         """Control loop"""
@@ -198,8 +211,8 @@ class Controller:
             self.setPointY = self.originY
             self.setPointZ = 1
             
-            setPointListX = self.originX + np.array([0,0,0,0,0,0,0])
-            setPointListY = self.originY + np.array([0,1.5,0,1.5,2,0,0])
+            setPointListX = self.originX + np.array([1.5,0,1.5,0,1.5,0,0])
+            setPointListY = self.originY + np.array([0,0,0,0,0,0,0])
             setPointListZ = np.array([1, 1, 1, 1, 1, 1,1])
             setPointTime = np.array([3, 7, 11, 15, 19, 23, 27])
 
@@ -211,7 +224,7 @@ class Controller:
             while (time.time() - startTime) < flyTime and not self.KILL:
                 timeStart = time.time()
                 self.check_kill_conditions()
-                self.update_speed_regs()
+                
                 
                 if timeStart - startTime > setPointTime[timereg]:
                     self.setPointX = setPointListX[timereg]
@@ -239,13 +252,14 @@ class Controller:
             startTime = time.time()
             while (time.time() - startTime) < landTime and not self.KILL and self.z > self.KILL_HEIGHT: 
                 timeStart = time.time()
-                self.update_speed_regs()
                 attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx_avg,self.vy_avg]),self.yaw,np.array([self.setPointX,self.setPointY]))
                 thrust=self.stabilizer.thrustStab(self.z, self.vz_avg,self.KILL_HEIGHT+0.1)                
                 yaw=self.stabilizer.yawStab(self.yaw,0)
                 self.cf.commander.send_setpoint(attitude[0],attitude[1],0,thrust)
                 #print('Landtime: {}'.format(time.time() - startTime))
                 self.loop_sleep(timeStart)
+            if self.KILL:
+                print('KILL detected')
             self.cf.commander.send_setpoint(0,0,0,0)
             self.cf.close_link()
             
@@ -272,33 +286,32 @@ class Controller:
 class windowThread(threading.Thread):
     
     
-    def __init__(self):
+    def __init__(self,controller):
         threading.Thread.__init__(self)
+        self.controller = controller
         self.daemon = True
         self.turnOff = False
-        
-    def fly(self):
-        print('YEET')
-        raise Exception()
-    
+
     def killSwitch(self):
-        self.turnOff = True
+        self.controller.KILL = True
+        print('GUI killswitch activated')
 
     def run(self):
         window = tkinter.Tk()
         button = tkinter.Button(
-                text="Allah hu ackbar",
-                command = self.fly,
-                width=25,
-                height=5,
+                text="KILL",
+                command = self.killSwitch,
+                width=35,
+                height=10,
                 bg="black",
-                fg="red",
+                fg="yellow",
                 )
         button.pack()
         window.mainloop()
 
 if __name__ == "__main__":
-    gui = windowThread()
-    gui.start()
     cflib.crtp.init_drivers(enable_debug_driver=False)
     control = Controller(URI)
+    gui = windowThread(control)
+    gui.start()
+        
