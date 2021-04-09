@@ -5,8 +5,8 @@ import logging
 import tkinter
 import numpy as np
 from threading import Thread
-import transformations as trans
-#from pyquaternion import Quaternion
+#import transformations as trans
+from pyquaternion import Quaternion
 from droneSTAB import droneSTAB
 
 import cflib
@@ -148,7 +148,8 @@ class Controller:
         self.attq = np.r_[data['kalman.q1'], data['kalman.q2'],
                           data['kalman.q3'], data['kalman.q0']]
         # Extract 3x3 rotation matrix from 4x4 transformation matrix
-        self.R = trans.quaternion_matrix(self.attq)[:3, :3]
+        #self.R = trans.quaternion_matrix(self.attq)[:3, :3]        #Blåe's line
+        self.R = Quaternion(self.attq)                              #Joar's line
         #r, p, y = trans.euler_from_quaternion(self.attq)
 
     def _log_error(self, logconf, msg):
@@ -167,13 +168,13 @@ class Controller:
         # Sleep a bit, hoping that the estimator will have converged
         # Should be replaced by something that actually checks...
         time.sleep(1.5)
-        
+
     def check_kill_conditions(self):
         if abs(self.pitch) > 35:
             self.KILL = True
         if abs(self.roll) > 35:
             self.KILL = True
-            
+
     def update_speed_regs(self):
         for i in range(self.smoothing_number - 1):
             self.vx_reg[i] = self.vx_reg[i]
@@ -185,7 +186,7 @@ class Controller:
         self.vx_avg = np.sum(self.vx_reg)/self.smoothing_number
         self.vy_avg = np.sum(self.vy_reg)/self.smoothing_number
         self.vz_avg = np.sum(self.vz_reg)/self.smoothing_number
-            
+
     def run(self):
         """Control loop"""
         try:
@@ -197,7 +198,7 @@ class Controller:
             self.setPointX = self.originX
             self.setPointY = self.originY
             self.setPointZ = 1
-            
+
             setPointListX = self.originX + np.array([0,0,0,0,0,0,0])
             setPointListY = self.originY + np.array([0,1.5,0,1.5,2,0,0])
             setPointListZ = np.array([1, 1, 1, 1, 1, 1,1])
@@ -207,18 +208,18 @@ class Controller:
             timereg = 0
             flyTime = setPointTime[-1]
             startTime = time.time()
-            
+
             while (time.time() - startTime) < flyTime and not self.KILL:
                 timeStart = time.time()
                 self.check_kill_conditions()
                 self.update_speed_regs()
-                
+
                 if timeStart - startTime > setPointTime[timereg]:
                     self.setPointX = setPointListX[timereg]
                     self.setPointY = setPointListY[timereg]
                     self.setPointZ = setPointListZ[timereg]
                     timereg = timereg + 1
-                    
+
                 #attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx,self.vy]),self.yaw,np.array([self.setPointX,self.setPointY]))
                 #thrust=self.stabilizer.thrustStab(self.z, self.vz, self.setPointZ)
 
@@ -231,24 +232,24 @@ class Controller:
                 #print('Flytime: {}'.format(time.time() - startTime))
                 self.cf.commander.send_setpoint(attitude[0],attitude[1],yaw,thrust)
                 self.loop_sleep(timeStart)
-                
-                
+
+
             self.setPointX = self.originX
             self.setPointY = self.originY
             landTime = 2
             startTime = time.time()
-            while (time.time() - startTime) < landTime and not self.KILL and self.z > self.KILL_HEIGHT: 
+            while (time.time() - startTime) < landTime and not self.KILL and self.z > self.KILL_HEIGHT:
                 timeStart = time.time()
                 self.update_speed_regs()
                 attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx_avg,self.vy_avg]),self.yaw,np.array([self.setPointX,self.setPointY]))
-                thrust=self.stabilizer.thrustStab(self.z, self.vz_avg,self.KILL_HEIGHT+0.1)                
+                thrust=self.stabilizer.thrustStab(self.z, self.vz_avg,self.KILL_HEIGHT+0.1)
                 yaw=self.stabilizer.yawStab(self.yaw,0)
                 self.cf.commander.send_setpoint(attitude[0],attitude[1],0,thrust)
                 #print('Landtime: {}'.format(time.time() - startTime))
                 self.loop_sleep(timeStart)
             self.cf.commander.send_setpoint(0,0,0,0)
             self.cf.close_link()
-            
+
         except (KeyboardInterrupt):
             print("Hi")
             for i in range(130):
@@ -266,21 +267,21 @@ class Controller:
             time.sleep(deltaTime)
         else:
             print('Could not make controller loop deadline')
-            
-            
-            
+
+
+
 class windowThread(threading.Thread):
-    
-    
+
+
     def __init__(self):
         threading.Thread.__init__(self)
         self.daemon = True
         self.turnOff = False
-        
+
     def fly(self):
         print('YEET')
         raise Exception()
-    
+
     def killSwitch(self):
         self.turnOff = True
 
