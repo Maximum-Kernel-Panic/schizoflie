@@ -5,8 +5,9 @@ import logging
 import tkinter
 import numpy as np
 from threading import Thread
-#import transformations as trans
-from pyquaternion import Quaternion
+import joystickThread as jst
+import transformations as trans
+#from pyquaternion import Quaternion
 from droneSTAB import droneSTAB
 
 import cflib
@@ -20,18 +21,23 @@ URI = 'radio://0/80/2M'
 
 class Controller:
     def __init__(self,link_uri):
+        self.joystick = None
         self.rate = 100 # [Hz]
         self.cf = Crazyflie(rw_cache='./cache')
         self.stabilizer=droneSTAB()
+        self.joystickMode = False
         self.KILL = False
         self.KILL_HEIGHT = 0.1
+        self.flying = False
+        self.hasParked = False
+        self.hasLanded = False
         
-        self.smoothing_number = 3
+        self.smoothing_number = 2
         #sets the velocity estimation weights based on smoothing number
         if self.smoothing_number == 2:
             self.vel_weights = np.array([0.5, 0.5])
         elif self.smoothing_number == 3:
-            self.vel_weights = np.array([0.25, 0.3, 0.45])
+            self.vel_weights = np.array([0.1, 0.3, 0.6])
         elif self.smoothing_number  == 4:
             self.vel_weights = np.array([0.05, 0.2, 0.25, 0.4])
         else:
@@ -160,9 +166,9 @@ class Controller:
         self.attq = np.r_[data['kalman.q1'], data['kalman.q2'],
                           data['kalman.q3'], data['kalman.q0']]
         # Extract 3x3 rotation matrix from 4x4 transformation matrix
-        #self.R = trans.quaternion_matrix(self.attq)[:3, :3]        #Blåe's line
-        self.R = Quaternion(self.attq)                              #Joar's line
-        #r, p, y = trans.euler_from_quaternion(self.attq)
+        self.R = trans.quaternion_matrix(self.attq)[:3, :3]        #Blåe's line
+        #self.R = Quaternion(self.attq)                              #Joar's line
+        r, p, y = trans.euler_from_quaternion(self.attq)
 
     def _log_error(self, logconf, msg):
         print('Error when logging %s: %s' % (logconf.name, msg))
@@ -195,18 +201,38 @@ class Controller:
         self.vx_reg[-1] = self.vx
         self.vy_reg[-1] = self.vy
         self.vz_reg[-1] = self.vz
-<<<<<<< HEAD
-        self.vx_avg = np.sum(self.vx_reg)/self.smoothing_number
-        self.vy_avg = np.sum(self.vy_reg)/self.smoothing_number
-        self.vz_avg = np.sum(self.vz_reg)/self.smoothing_number
 
-=======
-        
         self.vx_avg = np.dot(self.vx_reg, self.vel_weights)
         self.vy_avg = np.dot(self.vy_reg, self.vel_weights)
         self.vz_avg = np.dot(self.vz_reg, self.vel_weights)
             
->>>>>>> 6e75bd962dd04f9bbd383186ed14e7c271205717
+    def enable_joystick_mode(self):
+        if self.joystick is None:
+            print("Trying to enable manual mode with no joystick connected!")
+        else:
+            self.joystickMode = True
+            
+    def disable_joystick_mode(self):
+        self.joystickMode = False
+        
+    def set_joystick(self, joystick):
+        #if joystick is jst.joyStickThread:
+        #    self.joystick = joystick
+        #else:
+        #    print("Fatal error: Incorrect reference")
+        self.joystick = joystick
+        
+    def setRef(self,xref,yref,zref):
+        self.setPointX=xref
+        self.setPointY=yref
+        self.setPointZ=zref
+
+    def takeoff(self):
+        self.setPointX = self.x
+        self.setPointY = self.y
+        self.setPointZ = 1
+        self.flying=True
+
     def run(self):
         """Control loop"""
         try:
@@ -218,65 +244,68 @@ class Controller:
             self.setPointX = self.originX
             self.setPointY = self.originY
             self.setPointZ = 1
-<<<<<<< HEAD
-
-            setPointListX = self.originX + np.array([0,0,0,0,0,0,0])
-            setPointListY = self.originY + np.array([0,1.5,0,1.5,2,0,0])
-=======
             
-            setPointListX = self.originX + np.array([1.5,0,1.5,0,1.5,0,0])
-            setPointListY = self.originY + np.array([0,0,0,0,0,0,0])
->>>>>>> 6e75bd962dd04f9bbd383186ed14e7c271205717
-            setPointListZ = np.array([1, 1, 1, 1, 1, 1,1])
-            setPointTime = np.array([3, 7, 11, 15, 19, 23, 27])
 
-            self.cf.commander.send_setpoint(0, 0, 0, 0)
-            timereg = 0
-            flyTime = setPointTime[-1]
             startTime = time.time()
 
-            while (time.time() - startTime) < flyTime and not self.KILL:
+            while not self.KILL:
                 timeStart = time.time()
+                
+                while not self.flying:
+                    if not self.hasLanded:
+                        self.setPointX = self.x
+                        self.setPointY = self.y
+                        landTime = 2
+                        landStartTime = time.time()
+                        while (time.time() - landStartTime) < landTime and not self.KILL and self.z > self.KILL_HEIGHT:
+                            timeStart = time.time()
+                            attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx_avg,self.vy_avg]),self.yaw,np.array([self.setPointX,self.setPointY]))
+                            thrust=self.stabilizer.thrustStab(self.z, self.vz_avg,self.KILL_HEIGHT+0.1)
+                            yaw=self.stabilizer.yawStab(self.yaw,0)
+                            self.cf.commander.send_setpoint(attitude[0],attitude[1],0,thrust)
+                            self.loop_sleep(timeStart)
+                    
+                    self.hasLanded = True
+                    timeStart = time.time()
+                    self.cf.commander.send_setpoint(0,0,0,0)
+                    self.loop_sleep(timeStart)
+                
+                self.hasLanded = False
                 self.check_kill_conditions()
-<<<<<<< HEAD
                 self.update_speed_regs()
-
-=======
                 
                 
->>>>>>> 6e75bd962dd04f9bbd383186ed14e7c271205717
-                if timeStart - startTime > setPointTime[timereg]:
-                    self.setPointX = setPointListX[timereg]
-                    self.setPointY = setPointListY[timereg]
-                    self.setPointZ = setPointListZ[timereg]
-                    timereg = timereg + 1
-
-                #attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx,self.vy]),self.yaw,np.array([self.setPointX,self.setPointY]))
-                #thrust=self.stabilizer.thrustStab(self.z, self.vz, self.setPointZ)
-
-                attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx_avg,self.vy_avg]),self.yaw,np.array([self.setPointX,self.setPointY]))
-                thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, self.setPointZ)
-                yaw=self.stabilizer.yawStab(self.yaw,0)
-                #print('pitch: {} roll: {}'.format(round(self.pitch,2),round(self.roll,2)))
-                print('x:{} y:{} z:{} , setpoint({},{},{}), origin: ({},{})'.format(round(self.x,2),round(self.y,2),round(self.z,2),round(self.setPointX,2),round(self.setPointY,2),round(self.setPointZ,2),round(self.originX,2),round(self.originY,2)))
-                #print('vx_avg:{} vy_avg:{} vz_avg:{} origin: ({},{})'.format(round(self.vx_avg,2),round(self.vy_avg,2),round(self.vz_avg,2),round(self.originX,2),round(self.originY,2)))
-                #print('Flytime: {}'.format(time.time() - startTime))
-                self.cf.commander.send_setpoint(attitude[0],attitude[1],yaw,thrust)
+                if self.joystickMode:
+                    pitch = self.joystick.pitch
+                    roll = self.joystick.roll
+                    yaw = self.joystick.yaw
+                    thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, 1)
+                    
+                    if (pitch == 0) and (roll == 0) and (yaw == 0):
+                        if not self.hasParked:
+                            self.setPointX = self.x
+                            self.setPointY = self.y
+                            
+                        self.hasParked = True
+                        attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx_avg,self.vy_avg]),self.yaw,np.array([self.setPointX,self.setPointY]))
+                        thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, self.setPointZ)
+                        yaw=self.stabilizer.yawStab(self.yaw,0)
+                        self.cf.commander.send_setpoint(attitude[0],attitude[1],yaw,thrust)
+                                        
+                    else:       
+                        self.hasParked = False
+                        self.cf.commander.send_setpoint(roll, -pitch ,yaw,thrust)
+                    
+                else:
+                    attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx_avg,self.vy_avg]),self.yaw,np.array([self.setPointX,self.setPointY]))
+                    thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, self.setPointZ)
+                    yaw=self.stabilizer.yawStab(self.yaw,0)
+                    self.cf.commander.send_setpoint(attitude[0],attitude[1],yaw,thrust)
+                    
+                    
+                
                 self.loop_sleep(timeStart)
-
-
-            self.setPointX = self.originX
-            self.setPointY = self.originY
-            landTime = 2
-            startTime = time.time()
-            while (time.time() - startTime) < landTime and not self.KILL and self.z > self.KILL_HEIGHT:
-                timeStart = time.time()
-                attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx_avg,self.vy_avg]),self.yaw,np.array([self.setPointX,self.setPointY]))
-                thrust=self.stabilizer.thrustStab(self.z, self.vz_avg,self.KILL_HEIGHT+0.1)
-                yaw=self.stabilizer.yawStab(self.yaw,0)
-                self.cf.commander.send_setpoint(attitude[0],attitude[1],0,thrust)
-                #print('Landtime: {}'.format(time.time() - startTime))
-                self.loop_sleep(timeStart)
+                
             if self.KILL:
                 print('KILL detected')
             self.cf.commander.send_setpoint(0,0,0,0)
@@ -303,27 +332,19 @@ class Controller:
 
 
 class windowThread(threading.Thread):
-<<<<<<< HEAD
 
-
-    def __init__(self):
-=======
-    
     
     def __init__(self,controller):
->>>>>>> 6e75bd962dd04f9bbd383186ed14e7c271205717
+
         threading.Thread.__init__(self)
         self.controller = controller
         self.daemon = True
         self.turnOff = False
 
-<<<<<<< HEAD
     def fly(self):
         print('YEET')
         raise Exception()
 
-=======
->>>>>>> 6e75bd962dd04f9bbd383186ed14e7c271205717
     def killSwitch(self):
         self.controller.KILL = True
         print('GUI killswitch activated')
@@ -342,11 +363,13 @@ class windowThread(threading.Thread):
         window.mainloop()
 
 if __name__ == "__main__":
+    stick = jst.joyStickThread()
+    stick.start()
+    print("initiated joystick")
     cflib.crtp.init_drivers(enable_debug_driver=False)
     control = Controller(URI)
-<<<<<<< HEAD
-=======
+    control.set_joystick(stick)
+    
     gui = windowThread(control)
     gui.start()
         
->>>>>>> 6e75bd962dd04f9bbd383186ed14e7c271205717
