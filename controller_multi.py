@@ -6,8 +6,8 @@ import tkinter
 import numpy as np
 from threading import Thread
 import joystickThread as jst
-import transformations as trans
-#from pyquaternion import Quaternion
+#import transformations as trans
+from pyquaternion import Quaternion
 from droneSTAB import droneSTAB
 
 import cflib
@@ -31,7 +31,7 @@ class Controller:
         self.flying = False
         self.hasParked = False
         self.hasLanded = False
-        
+
         self.smoothing_number = 2
         #sets the velocity estimation weights based on smoothing number
         if self.smoothing_number == 2:
@@ -42,7 +42,7 @@ class Controller:
             self.vel_weights = np.array([0.05, 0.2, 0.25, 0.4])
         else:
             self.vel_weights = np.ones(self.smoothing_number)* 1/self.smoothing_number
-            
+
         self.vx_reg = np.zeros(self.smoothing_number)
         self.vy_reg = np.zeros(self.smoothing_number)
         self.vz_reg = np.zeros(self.smoothing_number)
@@ -166,9 +166,9 @@ class Controller:
         self.attq = np.r_[data['kalman.q1'], data['kalman.q2'],
                           data['kalman.q3'], data['kalman.q0']]
         # Extract 3x3 rotation matrix from 4x4 transformation matrix
-        self.R = trans.quaternion_matrix(self.attq)[:3, :3]        #Blåe's line
-        #self.R = Quaternion(self.attq)                              #Joar's line
-        r, p, y = trans.euler_from_quaternion(self.attq)
+        #self.R = trans.quaternion_matrix(self.attq)[:3, :3]        #Blåe's line
+        self.R = Quaternion(self.attq)                              #Joar's line
+        #r, p, y = trans.euler_from_quaternion(self.attq)
 
     def _log_error(self, logconf, msg):
         print('Error when logging %s: %s' % (logconf.name, msg))
@@ -205,23 +205,23 @@ class Controller:
         self.vx_avg = np.dot(self.vx_reg, self.vel_weights)
         self.vy_avg = np.dot(self.vy_reg, self.vel_weights)
         self.vz_avg = np.dot(self.vz_reg, self.vel_weights)
-            
+
     def enable_joystick_mode(self):
         if self.joystick is None:
             print("Trying to enable manual mode with no joystick connected!")
         else:
             self.joystickMode = True
-            
+
     def disable_joystick_mode(self):
         self.joystickMode = False
-        
+
     def set_joystick(self, joystick):
         #if joystick is jst.joyStickThread:
         #    self.joystick = joystick
         #else:
         #    print("Fatal error: Incorrect reference")
         self.joystick = joystick
-        
+
     def setRef(self,xref,yref,zref):
         self.setPointX=xref
         self.setPointY=yref
@@ -244,13 +244,13 @@ class Controller:
             self.setPointX = self.originX
             self.setPointY = self.originY
             self.setPointZ = 1
-            
+
 
             startTime = time.time()
 
             while not self.KILL:
                 timeStart = time.time()
-                
+
                 while not self.flying:
                     if not self.hasLanded:
                         self.setPointX = self.x
@@ -264,48 +264,48 @@ class Controller:
                             yaw=self.stabilizer.yawStab(self.yaw,0)
                             self.cf.commander.send_setpoint(attitude[0],attitude[1],0,thrust)
                             self.loop_sleep(timeStart)
-                    
+
                     self.hasLanded = True
                     timeStart = time.time()
                     self.cf.commander.send_setpoint(0,0,0,0)
                     self.loop_sleep(timeStart)
-                
+
                 self.hasLanded = False
                 self.check_kill_conditions()
                 self.update_speed_regs()
-                
-                
+
+
                 if self.joystickMode:
                     pitch = self.joystick.pitch
                     roll = self.joystick.roll
                     yaw = self.joystick.yaw
                     thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, 1)
-                    
+
                     if (pitch == 0) and (roll == 0) and (yaw == 0):
                         if not self.hasParked:
                             self.setPointX = self.x
                             self.setPointY = self.y
-                            
+
                         self.hasParked = True
                         attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx_avg,self.vy_avg]),self.yaw,np.array([self.setPointX,self.setPointY]))
                         thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, self.setPointZ)
                         yaw=self.stabilizer.yawStab(self.yaw,0)
                         self.cf.commander.send_setpoint(attitude[0],attitude[1],yaw,thrust)
-                                        
-                    else:       
+
+                    else:
                         self.hasParked = False
                         self.cf.commander.send_setpoint(roll, -pitch ,yaw,thrust)
-                    
+
                 else:
                     attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx_avg,self.vy_avg]),self.yaw,np.array([self.setPointX,self.setPointY]))
                     thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, self.setPointZ)
                     yaw=self.stabilizer.yawStab(self.yaw,0)
                     self.cf.commander.send_setpoint(attitude[0],attitude[1],yaw,thrust)
-                    
-                    
-                
+
+
+
                 self.loop_sleep(timeStart)
-                
+
             if self.KILL:
                 print('KILL detected')
             self.cf.commander.send_setpoint(0,0,0,0)
@@ -333,7 +333,7 @@ class Controller:
 
 class windowThread(threading.Thread):
 
-    
+
     def __init__(self,controller):
 
         threading.Thread.__init__(self)
@@ -369,7 +369,6 @@ if __name__ == "__main__":
     cflib.crtp.init_drivers(enable_debug_driver=False)
     control = Controller(URI)
     control.set_joystick(stick)
-    
+
     gui = windowThread(control)
     gui.start()
-        
