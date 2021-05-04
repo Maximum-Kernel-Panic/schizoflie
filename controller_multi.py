@@ -31,6 +31,9 @@ class Controller:
         self.flying = False
         self.hasParked = False
         self.hasLanded = False
+        self.x=0
+        self.y=0
+        self.z=0
 
         self.smoothing_number = 2
         #sets the velocity estimation weights based on smoothing number
@@ -193,6 +196,7 @@ class Controller:
         if abs(self.roll) > 45:
             self.KILL = True
 
+
     def update_speed_regs(self):
         for i in range(self.smoothing_number - 1):
             self.vx_reg[i] = self.vx_reg[i]
@@ -329,39 +333,6 @@ class Controller:
         else:
             print('Could not make controller loop deadline')
 
-
-
-class windowThread(threading.Thread):
-
-
-    def __init__(self,controller):
-
-        threading.Thread.__init__(self)
-        self.controller = controller
-        self.daemon = True
-        self.turnOff = False
-
-    def fly(self):
-        print('YEET')
-        raise Exception()
-
-    def killSwitch(self):
-        self.controller.KILL = True
-        print('GUI killswitch activated')
-
-    def run(self):
-        window = tkinter.Tk()
-        button = tkinter.Button(
-                text="KILL",
-                command = self.killSwitch,
-                width=35,
-                height=10,
-                bg="black",
-                fg="yellow",
-                )
-        button.pack()
-        window.mainloop()
-
 if __name__ == "__main__":
     stick = jst.joyStickThread()
     stick.start()
@@ -369,6 +340,3 @@ if __name__ == "__main__":
     cflib.crtp.init_drivers(enable_debug_driver=False)
     control = Controller(URI)
     control.set_joystick(stick)
-
-    gui = windowThread(control)
-    gui.start()

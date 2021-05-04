@@ -33,11 +33,17 @@ class SimpleWindu(threading.Thread):
             fly.configure(bg="green")
             land.configure(bg="red")
             self.controller.takeoff()
+            self.xdisp.delete(0,tk.END)
+            self.xdisp.insert(tk.END,round(self.controller.setPointX,2))
+            self.ydisp.delete(0,tk.END)
+            self.ydisp.insert(tk.END,round(self.controller.setPointY,2))
+            self.zdisp.delete(0,tk.END)
+            self.zdisp.insert(tk.END,round(self.controller.setPointZ,2))
         def landclick():
             fly.configure(bg="red")
             land.configure(bg="green")
-            messagebox.showinfo(title=None,message="Landing the Crazyflie!")
             self.controller.flying=False
+            messagebox.showinfo(title=None,message="Landing the Crazyflie!")
 
         def killclick():
             self.controller.KILL=True
@@ -45,12 +51,12 @@ class SimpleWindu(threading.Thread):
 
         def joystick_mode():
             if not self.activejoy:
-                controller.enable_joystick_mode()
+                self.controller.enable_joystick_mode()
                 joystick.configure(bg="green")
                 print("lel")
                 self.activejoy=True
             else:
-                controller.disable_joystick_mode()
+                self.controller.disable_joystick_mode()
                 joystick.configure(bg="red")
                 self.activejoy=False
 
@@ -116,7 +122,6 @@ class SimpleWindu(threading.Thread):
             xlbl.pack()
             self.xref=tk.Label(lFrame,text="0.0")
             self.xref.pack()
-            #self.xref.after(0,self.update_ref())
             ylbl=tk.Label(rFrame,text="Current Y:")
             ylbl.pack()
             self.yref=tk.Label(lFrame,text="0.0")
@@ -129,11 +134,11 @@ class SimpleWindu(threading.Thread):
         add_refpos_fields(self)
         add_setpoint_fields(self)
 
-    def update_ref(self):
-        self.xref.configure(text="{}".format(controller.x))
-        self.yref.configure(text="{}".format(controller.y))
-        self.zref.configure(text="{}".format(controller.z))
-        self.window.after(250,update_ref)
+    def updateref(self):
+        self.xref.configure(text="{}".format(round(self.controller.x,2)))
+        self.yref.configure(text="{}".format(round(self.controller.y,2)))
+        self.zref.configure(text="{}".format(round(self.controller.z,2)))
+        self.window.after(250,self.updateref)
 
     def run(self):
         """Control loop"""
@@ -142,11 +147,8 @@ class SimpleWindu(threading.Thread):
             self.window.title("Crazyflie Drone")
             self.window.geometry('350x200')
             self._add_components()
+            self.window.after(0,self.updateref)
             self.window.mainloop()
-            while True:
-                timeStart = time.time()
-                #self.xdisp.insert(tk.INSERT,str(round(self.controller.pos[0],2)))
-                self.loop_sleep(timeStart)
         except (KeyboardInterrupt):
             pass
 
