@@ -6,8 +6,8 @@ import tkinter
 import numpy as np
 from threading import Thread
 import joystickThread as jst
-#import transformations as trans
-from pyquaternion import Quaternion
+import transformations as trans
+#from pyquaternion import Quaternion
 from droneSTAB import droneSTAB
 
 import cflib
@@ -169,8 +169,8 @@ class Controller:
         self.attq = np.r_[data['kalman.q1'], data['kalman.q2'],
                           data['kalman.q3'], data['kalman.q0']]
         # Extract 3x3 rotation matrix from 4x4 transformation matrix
-        #self.R = trans.quaternion_matrix(self.attq)[:3, :3]        #Blåe's line
-        self.R = Quaternion(self.attq)                              #Joar's line
+        self.R = trans.quaternion_matrix(self.attq)[:3, :3]        #Blåe's line
+        #self.R = Quaternion(self.attq)                              #Joar's line
         #r, p, y = trans.euler_from_quaternion(self.attq)
 
     def _log_error(self, logconf, msg):
@@ -264,7 +264,7 @@ class Controller:
                         while (time.time() - landStartTime) < landTime and not self.KILL and self.z > self.KILL_HEIGHT:
                             timeStart = time.time()
                             attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx_avg,self.vy_avg]),self.yaw,np.array([self.setPointX,self.setPointY]))
-                            thrust=self.stabilizer.thrustStab(self.z, self.vz_avg,self.KILL_HEIGHT+0.1)
+                            thrust=self.stabilizer.thrustStab(self.z, self.vz_avg,self.KILL_HEIGHT+0.1,False)
                             yaw=self.stabilizer.yawStab(self.yaw,0)
                             self.cf.commander.send_setpoint(attitude[0],attitude[1],0,thrust)
                             self.loop_sleep(timeStart)
@@ -283,7 +283,7 @@ class Controller:
                     pitch = self.joystick.pitch
                     roll = self.joystick.roll
                     yaw = self.joystick.yaw
-                    thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, 1)
+                    thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, 1,self.joystickMode)
 
                     if (pitch == 0) and (roll == 0) and (yaw == 0):
                         if not self.hasParked:
@@ -292,7 +292,7 @@ class Controller:
 
                         self.hasParked = True
                         attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx_avg,self.vy_avg]),self.yaw,np.array([self.setPointX,self.setPointY]))
-                        thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, self.setPointZ)
+                        thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, self.setPointZ, False)
                         yaw=self.stabilizer.yawStab(self.yaw,0)
                         self.cf.commander.send_setpoint(attitude[0],attitude[1],yaw,thrust)
 
@@ -302,7 +302,7 @@ class Controller:
 
                 else:
                     attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx_avg,self.vy_avg]),self.yaw,np.array([self.setPointX,self.setPointY]))
-                    thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, self.setPointZ)
+                    thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, self.setPointZ,False)
                     yaw=self.stabilizer.yawStab(self.yaw,0)
                     self.cf.commander.send_setpoint(attitude[0],attitude[1],yaw,thrust)
 
@@ -319,7 +319,7 @@ class Controller:
             print("Hi")
             for i in range(130):
                 attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx,self.vy]),self.yaw,np.array([self.originX,self.originY]))
-                thrust=self.stabilizer.thrustStab(self.z, self.vz,0.05)
+                thrust=self.stabilizer.thrustStab(self.z, self.vz,0.05,False)
                 yaw=self.stabilizer.yawStab(self.yaw,0)
                 self.cf.commander.send_setpoint(attitude[0],attitude[1],0,thrust)
                 time.sleep(0.01)

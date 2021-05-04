@@ -3,18 +3,18 @@ import time
 import sys
 import logging
 import numpy as np
-import keyboard
+#import keyboard
 from threading import Thread
 import joystickThread as jst
-#import transformations as trans
-from pyquaternion import Quaternion
+import transformations as trans
+#from pyquaternion import Quaternion
 from droneSTAB import droneSTAB
 from controller_multi import Controller
 from GUI import SimpleWindu
 import cflib
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.log import LogConfig
-from drone import GUITest
+
 
 
 logging.basicConfig(level=logging.ERROR)

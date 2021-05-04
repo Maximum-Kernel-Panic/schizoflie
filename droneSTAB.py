@@ -29,10 +29,10 @@ class droneSTAB():
         tranY = np.cos(alpha)*setPoint[1]+np.sin(alpha)*setPoint[0]
         pitch = min(maxAng,max(-maxAng,((tranX-pos[0])*kp-vel[0]*kv)*self.thrustComp))
         roll = min(maxAng,max(-maxAng,((tranY-pos[1])*kp-vel[1]*kv)*self.thrustComp))
-        #self.angComp = np.sqrt(1+(np.pi*pitch/180)**2+(np.pi*roll/180)**2)
+        self.angComp = np.sqrt(1+(np.pi*pitch/180)**2+(np.pi*roll/180)**2)
         return np.array([-roll,pitch])
 
-    def thrustStab(self, z, zvel, zref):
+    def thrustStab(self, z, zvel, zref,comp=False):
 
         deltaH = 0.5
         if zref-z > deltaH:
@@ -44,6 +44,11 @@ class droneSTAB():
 
         else:
             self._zref = zref
+            
+        if comp:
+            angComp = self.angComp
+        else:
+            angComp = 1
 
         #self._zref = zref
         minThrust = 25000
@@ -52,6 +57,6 @@ class droneSTAB():
         e = self._zref-z
         Kp = 35000
         Kv = 50000
-        thrust = min(maxThrust,max(minThrust,int(self.angComp*(Kp*e-Kv*zvel + zeroG))))
+        thrust = min(maxThrust,max(minThrust,int(angComp*(Kp*e-Kv*zvel + zeroG))))
         #self.thrustComp = zeroG/thrust
         return thrust

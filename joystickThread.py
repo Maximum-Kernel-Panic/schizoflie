@@ -29,8 +29,8 @@ class joyStickThread(threading.Thread):
         self.inactivity_timer = 0
         self.tol = 0.04
         self.parking_timer = 1
-        self.gain = 15;
-        self.yaw_gain = 8 * self.gain
+        self.gain = 20;
+        self.yaw_gain = 5 * self.gain
         
     def run(self):
         
@@ -40,12 +40,12 @@ class joyStickThread(threading.Thread):
         sticky = pygame.joystick.Joystick(0)
         sticky.init()
         pygame.event.get()
-        #self.pitch_origin = sticky.get_axis(1)
-        #self.roll_origin = sticky.get_axis(0)
+        self.pitch_origin = sticky.get_axis(1)
+        self.roll_origin = sticky.get_axis(0)
         self.yaw_origin = sticky.get_axis(2)
         
-        self.pitch_origin = 0
-        self.roll_origin = 0
+        #self.pitch_origin = 0
+        #self.roll_origin = 0
         #self.yaw_origin = 0
         
         
