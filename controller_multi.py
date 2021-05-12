@@ -62,6 +62,7 @@ class Controller:
 
         # Control period. [ms]
         self.period_in_ms = 10  # a random number
+        self.joystickHatDelta = 0.4*self.period_in_ms/1000
         # Pose estimate from the Kalman filter
         self.pos = np.r_[0.0, 0.0, 0.0]
         self.vel = np.r_[0.0, 0.0, 0.0]
@@ -191,10 +192,9 @@ class Controller:
         time.sleep(1.5)
 
     def check_kill_conditions(self):
-        if abs(self.pitch) > 45:
+        if (self.pitch**2 + self.roll**2) > 45**2:
             self.KILL = True
-        if abs(self.roll) > 45:
-            self.KILL = True
+        
 
 
     def update_speed_regs(self):
@@ -264,7 +264,7 @@ class Controller:
                         while (time.time() - landStartTime) < landTime and not self.KILL and self.z > self.KILL_HEIGHT:
                             timeStart = time.time()
                             attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx_avg,self.vy_avg]),self.yaw,np.array([self.setPointX,self.setPointY]))
-                            thrust=self.stabilizer.thrustStab(self.z, self.vz_avg,self.KILL_HEIGHT+0.1,False)
+                            thrust=self.stabilizer.thrustStab(self.z, self.vz_avg,self.KILL_HEIGHT+0.1, True, self.roll, self.pitch)
                             yaw=self.stabilizer.yawStab(self.yaw,0)
                             self.cf.commander.send_setpoint(attitude[0],attitude[1],0,thrust)
                             self.loop_sleep(timeStart)
@@ -283,7 +283,11 @@ class Controller:
                     pitch = self.joystick.pitch
                     roll = self.joystick.roll
                     yaw = self.joystick.yaw
-                    thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, 1,self.joystickMode)
+                    hat = self.joystick.hat
+                    if hat is not None:
+                        self.setPointZ = self.setPointZ + hat*self.joystickHatDelta
+                        
+                    thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, self.setPointZ ,self.joystickMode)
 
                     if (pitch == 0) and (roll == 0) and (yaw == 0):
                         if not self.hasParked:
@@ -292,7 +296,7 @@ class Controller:
 
                         self.hasParked = True
                         attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx_avg,self.vy_avg]),self.yaw,np.array([self.setPointX,self.setPointY]))
-                        thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, self.setPointZ, False)
+                        thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, self.setPointZ, True, self.roll, self.pitch)
                         yaw=self.stabilizer.yawStab(self.yaw,0)
                         self.cf.commander.send_setpoint(attitude[0],attitude[1],yaw,thrust)
 
@@ -302,9 +306,11 @@ class Controller:
 
                 else:
                     attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx_avg,self.vy_avg]),self.yaw,np.array([self.setPointX,self.setPointY]))
-                    thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, self.setPointZ,False)
+                    thrust=self.stabilizer.thrustStab(self.z, self.vz_avg, self.setPointZ, True, self.roll, self.pitch)
                     yaw=self.stabilizer.yawStab(self.yaw,0)
+                    
                     self.cf.commander.send_setpoint(attitude[0],attitude[1],yaw,thrust)
+                    
 
 
 
@@ -316,10 +322,10 @@ class Controller:
             self.cf.close_link()
 
         except (KeyboardInterrupt):
-            print("Hi")
+            print("KEYBOARD INTERRUPT")
             for i in range(130):
                 attitude=self.stabilizer.rollPitchStabPos(np.array([self.x,self.y]),np.array([self.vx,self.vy]),self.yaw,np.array([self.originX,self.originY]))
-                thrust=self.stabilizer.thrustStab(self.z, self.vz,0.05,False)
+                thrust=self.stabilizer.thrustStab(self.z, self.vz,0.05, True, self.roll, self.pitch)
                 yaw=self.stabilizer.yawStab(self.yaw,0)
                 self.cf.commander.send_setpoint(attitude[0],attitude[1],0,thrust)
                 time.sleep(0.01)

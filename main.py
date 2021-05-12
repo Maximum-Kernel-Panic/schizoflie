@@ -10,6 +10,7 @@ import transformations as trans
 #from pyquaternion import Quaternion
 from droneSTAB import droneSTAB
 from controller_multi import Controller
+from PositionLogger import PositionLogger
 from GUI import SimpleWindu
 import cflib
 from cflib.crazyflie import Crazyflie
@@ -29,6 +30,8 @@ if __name__ == "__main__":
     cflib.crtp.init_drivers(enable_debug_driver=False)
     control = Controller(URI)
     control.set_joystick(stick)
+    logger = PositionLogger(control)
+    logger.start()
     gui=SimpleWindu(control)
     gui.start()
     #gui2=GUITest()
